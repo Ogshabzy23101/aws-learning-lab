@@ -1,0 +1,38 @@
+# Terraform working directories
+**/.terraform/*
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+
+# Terraform variable files
+*.tfvars
+*.tfvars.json
+
+# Terraform backend config
+backend.hcl
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Sensitive/environment files
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# kubeconfig / Kubernetes local credentials
+.kube/
+kubeconfig
+
+# macOS
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+
+#disposable test file
+docs/*.txt
