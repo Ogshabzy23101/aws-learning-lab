@@ -1,0 +1,14 @@
+# this service file is just a simple service for a demo app to practice some eks lab
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-lab-service
+spec:
+  selector:
+    matchLabels: devops-lab-app
+  ports:
+    - port: 80
+      targetPort: 5173
+  type: ClusterIP
+

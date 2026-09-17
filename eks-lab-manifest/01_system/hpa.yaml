@@ -1,0 +1,23 @@
+# this horizontal pod autoscaller file is just a simple hpa for a demo app to practice some eks lab, its demostartae how pod can be auto scale base on cpu usage or work load.  
+
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: devops-lab-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: devops-lab-app
+
+  minReplicas: 2
+  maxReplicas: 5
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: 
+          type: Utilization
+          averageUtilization: 50

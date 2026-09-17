@@ -1,0 +1,44 @@
+# this deploymeny file is just a simple deployment for a demo app to practice some eks lab
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-lab-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devops-lab-app
+  template:
+    metadata:
+      labels:
+        app: devops-lab-app
+    spec:
+      containers:
+        - name: devops-lab-app
+          ports:
+            - containerPort: 5173
+          image: 384567542379.dkr.ecr.eu-west-2.amazonaws.com/devops-lab-ecr:v1
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5173
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5173
+            initialDelaySeconds: 10
+            periodSeconds: 15
+
+      volume: 
+          

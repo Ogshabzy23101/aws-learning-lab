@@ -1,0 +1,7 @@
+# This is a service account for the cluster autoscaler. It will be attached to a pod identity association that is linked to an AWS IAM role.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-autoscaler-sa
+  namespace: kube-system

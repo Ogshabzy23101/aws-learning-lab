@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler-deployment
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
+  template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
+    spec:
+      serviceAccountName: cluster-autoscaler-sa
+      containers:
+        - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.36.1
+          name: cluster-autoscaler
+          command:
+            - ./cluster-autoscaler
+            - --cloud-provider=aws
+            - --namespace=kube-system
+            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/devops-lab-eks
+            - --balance-similar-node-groups
+            - --skip-nodes-with-system-pods=false
+            - --expander=least-waste
+          resources:
+            requests:
+              cpu: 100m
+              memory: 300Mi
+            limits:
+              cpu: 100m
+              memory: 600Mi
+          env: 
+            - name: AWS_REGION
+              value: eu-west-2
+            - name: AWS_DEFAULT_REGION
+              value: eu-west-2
