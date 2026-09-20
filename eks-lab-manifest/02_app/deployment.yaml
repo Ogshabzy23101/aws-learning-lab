@@ -39,6 +39,14 @@ spec:
               port: 5173
             initialDelaySeconds: 10
             periodSeconds: 15
+            
+          volumeMounts:
+            - name: data
+              mountPath: /data
 
-      volume: 
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ebs-test-pvc
           
