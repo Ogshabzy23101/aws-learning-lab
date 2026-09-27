@@ -99,3 +99,10 @@ resource "aws_eks_pod_identity_association" "cluster_autoscaler" {
   service_account = var.service_account
   region          = var.region
 }
+resource "aws_eks_pod_identity_association" "alb_controller" {
+  cluster_name    = var.cluster_name
+  role_arn        = var.alb_controller_arn
+  namespace       = "kube-system"
+  service_account = "aws-load-balancer-controller"
+  region          = var.region
+}
