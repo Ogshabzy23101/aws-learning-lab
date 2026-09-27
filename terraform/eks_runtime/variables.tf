@@ -44,6 +44,11 @@ variable "cluster_autoscaler_arn" {
   type        = string
 
 }
+variable "alb_controller_arn" {
+  description = "arn for the alb controller role"
+  type        = string
+
+}
 variable "service_account" {
   description = "Managed node group name"
   type        = string
