@@ -28,7 +28,7 @@ The lab currently uses:
 
 ## Repository Structure
 
-````text
+```text
 aws-learning-lab/
 ├── docs/
 │   └── policies/
@@ -571,4 +571,412 @@ Planned next areas include:
 * deeper Terraform production patterns
 * integration with the Phone Store project
 
-````
+```
+
+## 15. AWS Load Balancer Controller and ALB Ingress
+
+The AWS Load Balancer Controller was installed to allow Kubernetes Ingress resources to provision and manage AWS Application Load Balancers.
+The controller was installed using Helm.
+The IAM integration used EKS Pod Identity rather than IRSA/OIDC.
+
+### IAM setup
+
+A dedicated IAM policy was created from the official AWS Load Balancer Controller IAM policy document.
+A dedicated IAM role was created for the controller:
+
+```text
+devops-lab-alb-controller-role
+
+The role trust policy allows:
+
+pods.eks.amazonaws.com
+
+with:
+
+sts:AssumeRole
+sts:TagSession
+
+The controller IAM policy was attached to the role.
+
+ServiceAccount
+
+A Kubernetes ServiceAccount was created:
+
+Name: aws-load-balancer-controller
+Namespace: kube-system
+
+The ServiceAccount was intentionally created separately rather than allowing Helm to create it.
+
+EKS Pod Identity association
+
+A Pod Identity association was created:
+
+devops-lab-eks
+→ kube-system
+→ aws-load-balancer-controller
+→ devops-lab-alb-controller-role
+
+This allows the controller Pods to obtain temporary AWS credentials without storing static credentials or using an OIDC-based IRSA setup.
+
+
+16. AWS Load Balancer Controller Helm Installation
+
+The AWS Load Balancer Controller Helm chart was installed from:
+
+eks/aws-load-balancer-controller
+
+The installation reused the existing ServiceAccount rather than creating a new one.
+
+The initial Helm configuration included:
+
+clusterName = devops-lab-eks
+serviceAccount.create = false
+serviceAccount.name = aws-load-balancer-controller
+
+Controller startup failure
+
+After installation, both controller Pods entered:
+
+CrashLoopBackOff
+
+Controller logs showed:
+
+unable to initialize AWS cloud
+failed to get VPC ID
+failed to fetch VPC ID from instance metadata
+context deadline exceeded
+
+The controller was attempting to discover the VPC through EC2 Instance Metadata Service.
+
+Because metadata access was not available to the controller Pods, the VPC could not be detected automatically.
+
+The Helm release was upgraded to explicitly provide:
+
+region = eu-west-2
+vpcId = <devops-lab-vpc-id>
+
+After the Helm upgrade, new controller Pods started successfully and remained:
+
+1/1 Running
+0 restarts
+
+This demonstrated the troubleshooting process:
+
+CrashLoopBackOff
+→ inspect controller logs
+→ identify VPC discovery failure
+→ recognise IMDS dependency
+→ explicitly configure region and VPC ID
+→ Helm upgrade
+→ controller recovered
+
+17. Kubernetes Service Troubleshooting
+
+Before creating the Ingress, the application Service was inspected.
+
+The Service was configured as:
+
+Type: ClusterIP
+Port: 80
+TargetPort: 5173
+
+Initially the Service showed:
+
+Endpoints: <none>
+
+The issue was traced to an incorrect Service selector.
+
+A Deployment selector uses:
+
+selector
+→ matchLabels
+
+while a Kubernetes Service selector uses direct label key/value mappings.
+selector
+  app: <app-name>
+
+instead of 
+
+selector
+  matchLabel
+
+After correcting the Service selector, the Service successfully discovered both application Pods.
+
+Example endpoint result:
+
+10.0.3.x:5173
+10.0.3.x:5173
+
+This confirmed:
+
+Service :80
+→ application Pods :5173
+
+before the Ingress was introduced.
+
+18. ALB Ingress
+
+A Kubernetes Ingress was created using:
+
+apiVersion: networking.k8s.io/v1
+IngressClass: alb
+
+The ALB configuration used:
+
+scheme = internet-facing
+target-type = ip
+healthcheck-path = /
+listen-port = HTTP 80
+
+The backend routed:
+
+/
+→ devops-lab-service :80
+
+The path type used was:
+
+Prefix
+
+This allows the root path and routes beneath it to be matched.
+
+Target type
+
+The Ingress uses:
+
+target-type: ip
+
+This means the AWS ALB registers Kubernetes Pod IP addresses directly in the target group.
+
+The resulting traffic model is:
+
+Internet
+→ ALB :80
+→ Kubernetes Ingress
+→ devops-lab-service :80
+→ application Pods :5173
+
+This differs from instance target mode, where traffic would first reach the worker node through a NodePort.
+
+
+19. Ingress Validation and API Troubleshooting
+
+The Ingress manifest was validated before application.
+
+Client-side dry-run initially passed some syntax but later server-side application exposed additional issues.
+
+Problems corrected included:
+
+Metadata
+→ metadata
+
+because Kubernetes field names are case-sensitive.
+
+The resource kind also required:
+
+Ingress
+
+rather than:
+
+ingress
+
+The ALB annotations also required proper YAML key/value syntax using:
+
+:
+
+rather than:
+
+=
+
+The listener configuration was stored as an annotation string.
+
+The distinction between validation modes was reinforced:
+
+kubectl apply --dry-run=client
+
+validates locally, while:
+
+kubectl apply --dry-run=server
+
+also validates the resource against the Kubernetes API server.
+
+
+20. ALB Provisioning
+
+After applying the Ingress, the AWS Load Balancer Controller successfully reconciled it.
+
+The Ingress received a public AWS ALB DNS address.
+
+The Ingress description showed:
+
+Ingress Class: alb
+Backend:
+devops-lab-service:80
+Targets:
+Pod IPs on port 5173
+
+Events showed:
+
+SuccessfullyReconciled
+
+This confirmed that the controller successfully created and configured the AWS ALB resources.
+
+
+21. End-to-End ALB Troubleshooting
+
+The ALB initially returned an application response containing:
+
+Blocked request.
+This host (...) is not allowed.
+
+This was not an AWS networking failure.
+
+The response proved the request had successfully travelled through:
+
+Internet
+→ ALB
+→ Ingress
+→ Service
+→ Pod
+
+The rejection occurred inside the application.
+
+Root cause
+
+The demo image was running the Vite development server:
+
+npm run dev --host 0.0.0.0
+
+on:
+
+port 5173
+
+The Vite configuration did not allow the ALB DNS hostname.
+
+The running process was confirmed from inside the Pod.
+
+The container also contained:
+
+Dockerfile.dev
+Dockerfile.prod
+nginx.conf
+vite.config.js
+
+but the active workload was using the Vite development server, not Nginx.
+
+Temporary lab fix
+
+Because the image was only a disposable demo image, the running Pod configuration was temporarily modified to allow the ALB hostname.
+
+After updating the Vite host configuration, the application became accessible from the browser through the public ALB.
+
+This modification was intentionally treated as temporary because changes made directly inside a running Pod disappear when that Pod is recreated.
+
+The production lesson is:
+
+application configuration
+→ source repository
+→ Docker image
+→ registry
+→ Kubernetes Deployment
+
+rather than manually editing running containers.
+
+22. ALB Lab Outcome
+
+The complete ALB path was successfully demonstrated:
+
+Browser
+→ internet-facing Application Load Balancer
+→ Kubernetes Ingress
+→ ClusterIP Service
+→ Pod IP
+→ Vite application
+
+The lab demonstrated practical experience with:
+
+* AWS Load Balancer Controller
+* Helm
+* EKS Pod Identity
+* IAM role trust relationships
+* ALB provisioning
+* Kubernetes Ingress
+* ClusterIP Services
+* direct Pod IP target registration
+* health checks
+* VPC discovery
+* controller logs
+* CrashLoopBackOff troubleshooting
+* Kubernetes Service selectors
+* server-side manifest validation
+* application-level HTTP host validation
+
+Troubleshooting cases completed
+
+The ALB exercise included multiple real failures:
+
+1. Controller CrashLoopBackOff
+   → VPC discovery through IMDS failed
+   → explicit region and VPC ID fixed the controller
+2. Service had no endpoints
+   → incorrect Service selector
+   → selector corrected
+   → Pod endpoints discovered
+3. Ingress manifest errors
+   → case-sensitive Kubernetes fields
+   → incorrect resource kind
+   → annotation syntax corrected
+4. ALB worked but application rejected request
+   → Vite Host validation
+   → temporary application configuration fix
+
+This exercise demonstrated an important troubleshooting principle:
+
+Do not assume every failed browser request is a load balancer problem.
+Trace the request layer by layer:
+ALB
+→ Ingress
+→ Service
+→ Endpoints
+→ Pod
+→ application
+
+Current EKS Practical Progress
+
+Completed practical areas now include:
+
+* EKS cluster provisioning
+* EKS access entries
+* managed node groups
+* private worker networking
+* NAT Gateway runtime networking
+* Metrics Server
+* HPA
+* Cluster Autoscaler
+* Pod scheduling under pressure
+* cordon
+* drain
+* PodDisruptionBudget behaviour
+* EBS CSI Driver
+* StorageClass
+* PVC and PV
+* persistent EBS storage
+* application Pod Identity
+* least-privilege IAM testing
+* AWS Load Balancer Controller
+* ALB Ingress
+* end-to-end external application access
+* controller and application troubleshooting
+
+Next Topic
+
+The next major EKS topic is observability.
+
+Planned work includes:
+
+EKS control-plane logging
+→ CloudWatch
+→ node/container metrics
+→ application logs
+→ cluster events
+→ incident investigation
+```
