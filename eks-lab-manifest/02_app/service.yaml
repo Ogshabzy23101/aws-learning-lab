@@ -5,8 +5,8 @@ kind: Service
 metadata:
   name: devops-lab-service
 spec:
-  selector:
-    matchLabels: devops-lab-app
+  selector: 
+    app: devops-lab-app
   ports:
     - port: 80
       targetPort: 5173
