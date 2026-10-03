@@ -13,5 +13,5 @@ variable "subnet_ids" {
 
 variable "dami_user_arn" {
   description = "dami admin user arn"
-  type = string
+  type        = string
 }
